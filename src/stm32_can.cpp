@@ -293,12 +293,11 @@ void Stm32Can::HandleMessage(int fifo)
 	uint8_t length, fmi;
 	uint32_t data[2];
 
-   // while (can_receive(canDev, fifo, true, &id, &ext, &rtr, &fmi, &length, (uint8_t*)data, 0) > 0)
-   can_receive(canDev, fifo, true, &id, &ext, &rtr, &fmi, &length, (uint8_t*)data, 0);
-   // {
+   while (can_receive(canDev, fifo, true, &id, &ext, &rtr, &fmi, &length, (uint8_t*)data, 0) > 0)
+   {
       HandleRx(id, data, length);
       lastRxTimestamp = rtc_get_counter_val();
-      // }
+      }
 }
 
 void Stm32Can::HandleTx()
