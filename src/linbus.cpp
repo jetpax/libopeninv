@@ -23,13 +23,20 @@
 
 #define HWINFO_ENTRIES (sizeof(hwInfo) / sizeof(struct HwInfo))
 
-const LinBus::HwInfo LinBus::hwInfo[] =
-{
-   { USART1, DMA_CHANNEL4, DMA_CHANNEL5, GPIOA, GPIO_USART1_TX },
-   { USART2, DMA_CHANNEL7, DMA_CHANNEL6, GPIOA, GPIO_USART2_TX },
-   { USART3, DMA_CHANNEL2, DMA_CHANNEL3, GPIOB, GPIO_USART3_TX },
+#ifdef STM32F1
+const LinBus::HwInfo LinBus::hwInfo[] = {
+    {USART1, DMA_CHANNEL4, DMA_CHANNEL5, GPIOA, GPIO_USART1_TX},
+    {USART2, DMA_CHANNEL7, DMA_CHANNEL6, GPIOA, GPIO_USART2_TX},
+    {USART3, DMA_CHANNEL2, DMA_CHANNEL3, GPIOB, GPIO_USART3_TX},
 };
-
+#else
+const LinBus::HwInfo LinBus::hwInfo[] = {
+   // chosen from F405 reference manual
+    {(uint32_t)USART1, (uint32_t)DMA2, DMA_STREAM7, DMA_STREAM2, 4, (uint32_t)GPIOA, GPIO9},  
+    {(uint32_t)USART2, (uint32_t)DMA1, DMA_STREAM6, DMA_STREAM5, 4, (uint32_t)GPIOA, GPIO2},  
+    {(uint32_t)USART3, (uint32_t)DMA1, DMA_STREAM3, DMA_STREAM1, 4, (uint32_t)GPIOB, GPIO10}  
+};
+#endif
 
 /** \brief Create a new LIN bus object and initialize USART, GPIO and DMA
  * \pre According USART, GPIO and DMA clocks must be enabled
@@ -37,8 +44,8 @@ const LinBus::HwInfo LinBus::hwInfo[] =
  * \param baudrate 9600 or 19200
  *
  */
-LinBus::LinBus(uint32_t usart, int baudrate)
-   : usart(usart)
+LinBus::LinBus(uint32_t usart_port, int baudrate)
+   : usart(usart_port)
 {
    hw = hwInfo;
 
@@ -47,8 +54,12 @@ LinBus::LinBus(uint32_t usart, int baudrate)
       if (hw->usart == usart) break;
       hw++;
    }
-
+#ifdef STM32F1
    gpio_set_mode(hw->port, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, hw->pin);
+#else
+   gpio_mode_setup(hw->port, GPIO_MODE_AF, GPIO_PUPD_NONE, hw->pin);
+   gpio_set_af(hw->port, GPIO_AF7, hw->pin);
+#endif
 
    usart_set_baudrate(usart, baudrate);
    usart_set_databits(usart, 8);
@@ -60,6 +71,7 @@ LinBus::LinBus(uint32_t usart, int baudrate)
    usart_enable_tx_dma(usart);
    usart_enable_rx_dma(usart);
 
+#ifdef STM32F1
    dma_channel_reset(DMA1, hw->dmatx);
    dma_set_read_from_memory(DMA1, hw->dmatx);
    dma_set_peripheral_address(DMA1, hw->dmatx, (uint32_t)&USART_DR(usart));
@@ -73,7 +85,34 @@ LinBus::LinBus(uint32_t usart, int baudrate)
    dma_set_peripheral_size(DMA1, hw->dmarx, DMA_CCR_PSIZE_8BIT);
    dma_set_memory_size(DMA1, hw->dmarx, DMA_CCR_MSIZE_8BIT);
    dma_enable_memory_increment_mode(DMA1, hw->dmarx);
+#else
+   // Configure TX DMA
+   dma_stream_reset(hw->dma_controller, hw->dmatx);
+   dma_set_priority(hw->dma_controller, hw->dmatx, DMA_SxCR_PL_HIGH);
+   dma_set_transfer_mode(hw->dma_controller, hw->dmatx, DMA_SxCR_DIR_MEM_TO_PERIPHERAL); // TX: Memory to Peripheral
+   dma_set_peripheral_address(hw->dma_controller, hw->dmatx, (uint32_t)&USART_DR(usart));
+   dma_set_memory_address(hw->dma_controller, hw->dmatx, (uint32_t)sendBuffer);
+   dma_set_number_of_data(hw->dma_controller, hw->dmatx, sizeof(sendBuffer));
+   dma_set_peripheral_size(hw->dma_controller, hw->dmatx, DMA_SxCR_PSIZE_8BIT);
+   dma_set_memory_size(hw->dma_controller, hw->dmatx, DMA_SxCR_MSIZE_8BIT);
+   dma_enable_memory_increment_mode(hw->dma_controller, hw->dmatx);
+   dma_set_priority(hw->dma_controller, hw->dmatx, DMA_SxCR_PL_HIGH);
+   // Select the channel for TX
+   dma_channel_select(hw->dma_controller, hw->dmatx, DMA_SxCR_CHSEL_4);
 
+   // Configure RX DMA
+   dma_stream_reset(hw->dma_controller, hw->dmarx);
+   dma_set_priority(hw->dma_controller, hw->dmarx, DMA_SxCR_PL_HIGH);
+   dma_set_transfer_mode(hw->dma_controller, hw->dmarx, DMA_SxCR_DIR_PERIPHERAL_TO_MEM);  // RX: Peripheral to Memory
+   dma_set_peripheral_address(hw->dma_controller, hw->dmarx,(uint32_t)&USART_DR(usart));
+   dma_set_memory_address(hw->dma_controller, hw->dmarx, (uint32_t)recvBuffer);
+   dma_set_number_of_data(hw->dma_controller, hw->dmarx, sizeof(recvBuffer));
+   dma_set_peripheral_size(hw->dma_controller, hw->dmarx, DMA_SxCR_PSIZE_8BIT);
+   dma_set_memory_size(hw->dma_controller, hw->dmarx, DMA_SxCR_MSIZE_8BIT);
+   dma_enable_memory_increment_mode(hw->dma_controller, hw->dmarx);
+   // Select the channel for RX
+   dma_channel_select(hw->dma_controller, hw->dmarx, DMA_SxCR_CHSEL_4);
+#endif
    usart_enable(usart);
 }
 
@@ -89,10 +128,14 @@ void LinBus::Request(uint8_t id, uint8_t* data, uint8_t len)
    int sendLen = len == 0 ? 2 : len + 3;
 
    if (len > 8) return;
-
+#ifdef STM32F1
    dma_disable_channel(DMA1, hw->dmatx);
-   dma_set_number_of_data(DMA1, hw->dmatx, sendLen);
    dma_disable_channel(DMA1, hw->dmarx);
+#else
+   dma_disable_stream(hw->dma_controller, hw->dmatx);
+   dma_disable_stream(hw->dma_controller, hw->dmarx);
+#endif
+   dma_set_number_of_data(DMA1, hw->dmatx, sendLen);
    dma_set_memory_address(DMA1, hw->dmarx, (uint32_t)recvBuffer);
    dma_set_number_of_data(DMA1, hw->dmarx, sizeof(recvBuffer));
 
@@ -107,8 +150,13 @@ void LinBus::Request(uint8_t id, uint8_t* data, uint8_t len)
    dma_clear_interrupt_flags(DMA1, hw->dmatx, DMA_TCIF);
 
    USART_CR1(usart) |= USART_CR1_SBK;
+#ifdef STM32F1
    dma_enable_channel(DMA1, hw->dmatx);
    dma_enable_channel(DMA1, hw->dmarx);
+#else
+   dma_enable_stream(hw->dma_controller, hw->dmatx);
+   dma_enable_stream(hw->dma_controller, hw->dmarx);
+#endif
 }
 
 /** \brief Check whether we received valid data with given PID and length

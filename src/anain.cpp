@@ -58,21 +58,34 @@ void AnaIn::Start()
 {
    uint32_t adc[] = { ADC1, ADC2 };
 
-   for (int i = 0; i < ADC_COUNT; i++)
+   for (int i = 0; i < ADC_COUNT; i++) 
    {
-      adc_power_off(adc[i]);
-      adc_enable_scan_mode(adc[i]);
-      adc_set_continuous_conversion_mode(adc[i]);
-      adc_set_right_aligned(adc[i]);
-      adc_set_sample_time_on_all_channels(adc[i], SAMPLE_TIME);
-      adc_power_on(adc[i]);
-      adc_reset_calibration(adc[i]);
-      adc_calibrate(adc[i]);
-      adc_set_regular_sequence(adc[i], ANA_IN_COUNT / ADC_COUNT, channel_array[i]);
-      adc_enable_dma(adc[i]);
-      adc_enable_external_trigger_regular(adc[i], ADC_CR2_EXTSEL_SWSTART);
+     adc_power_off(adc[i]);
+     adc_enable_scan_mode(adc[i]);
+     adc_set_continuous_conversion_mode(adc[i]);
+     adc_set_right_aligned(adc[i]);
+     adc_set_sample_time_on_all_channels(adc[i], SAMPLE_TIME);
+     adc_power_on(adc[i]);
+
+#ifdef STM32F1
+     adc_reset_calibration(adc[i]);  // Only needed for STM32F1
+     adc_calibrate(adc[i]);          // Only needed for STM32F1
+#endif
+
+     adc_set_regular_sequence(adc[i], ANA_IN_COUNT / ADC_COUNT,
+                              channel_array[i]);
+     adc_enable_dma(adc[i]);
+
+#ifdef STM32F1
+     adc_enable_external_trigger_regular(adc[i], ADC_CR2_EXTSEL_SWSTART);
+#else
+     // STM32F4: Start regular conversion directly
+     adc_start_conversion_regular(adc[i]);
+#endif
    }
 
+#ifdef STM32F1
+   // STM32F1: DMA1 Channel for ADC1
    dma_set_peripheral_address(DMA1, ADC_DMA_CHAN, (uint32_t)&ADC_DR(ADC1));
    dma_set_memory_address(DMA1, ADC_DMA_CHAN, (uint32_t)values);
    dma_set_peripheral_size(DMA1, ADC_DMA_CHAN, TRANSFER_PSIZE);
@@ -81,17 +94,33 @@ void AnaIn::Start()
    dma_enable_memory_increment_mode(DMA1, ADC_DMA_CHAN);
    dma_enable_circular_mode(DMA1, ADC_DMA_CHAN);
    dma_enable_channel(DMA1, ADC_DMA_CHAN);
-
-   #if ADC_COUNT == 2
+#else
+   // STM32F4: DMA2 Stream 0, Channel 0 for ADC1
+   dma_stream_reset(DMA2, DMA_STREAM0);
+   dma_channel_select(DMA2, DMA_STREAM0, DMA_SxCR_CHSEL_0);  // Channel 0 for ADC1
+   dma_set_peripheral_address(DMA2, DMA_STREAM0, (uint32_t)&ADC_DR(ADC1));
+   dma_set_memory_address(DMA2, DMA_STREAM0, (uint32_t)values);
+   dma_set_number_of_data(DMA2, DMA_STREAM0, NUM_SAMPLES * ANA_IN_COUNT / ADC_COUNT);
+   dma_set_transfer_mode(DMA2, DMA_STREAM0, DMA_SxCR_DIR_PERIPHERAL_TO_MEM);
+   dma_enable_memory_increment_mode(DMA2, DMA_STREAM0);
+   dma_enable_circular_mode(DMA2, DMA_STREAM0);
+   dma_enable_stream(DMA2, DMA_STREAM0);
+#endif
+#if ADC_COUNT == 2
    adc_set_dual_mode(ADC_CR1_DUALMOD_CRSISM);
-   #endif
+#endif
    adc_start_conversion_regular(ADC1);
 }
 
 void AnaIn::Configure(uint32_t port, uint8_t pin)
 {
-   gpio_set_mode(port, GPIO_MODE_INPUT, GPIO_CNF_INPUT_ANALOG, 1 << pin);
-
+#ifdef STM32F1
+    // STM32F1: Use gpio_set_mode and GPIO_CNF_INPUT_ANALOG
+    gpio_set_mode(port, GPIO_MODE_INPUT, GPIO_CNF_INPUT_ANALOG, 1 << pin);
+#else
+    // STM32F4: Use gpio_mode_setup and GPIO_MODE_ANALOG
+    gpio_mode_setup(port, GPIO_MODE_ANALOG, GPIO_PUPD_NONE, 1 << pin);
+#endif
    #if ADC_COUNT == 1
    channel_array[0][GetIndex()] = AdcChFromPort(port, pin);
    #elif ADC_COUNT == 2

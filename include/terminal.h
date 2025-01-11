@@ -46,14 +46,20 @@ public:
 private:
    struct HwInfo
    {
-      uint32_t usart;
-      uint32_t dmactl;
-      uint8_t dmatx;
-      uint8_t dmarx;
-      uint32_t port;
-      uint16_t pin;
-      uint32_t port_re;
-      uint16_t pin_re;
+      uint32_t usart;       // USART base address
+      uint32_t dmactl;      // DMA controller base address
+#ifdef STM32F1
+      uint8_t dmatx;        // DMA channel for TX (STM32F1 only)
+      uint8_t dmarx;        // DMA channel for RX (STM32F1 only)
+#else
+      uint8_t dmatx;        // DMA stream for TX (STM32F405)
+      uint8_t dmarx;        // DMA stream for RX (STM32F405)
+      uint8_t dmaChannel;   // DMA channel for both TX and RX (STM32F405)
+#endif
+      uint32_t port;        // GPIO port for TX
+      uint16_t pin;         // GPIO pin for TX
+      uint32_t port_re;     // GPIO port for remapped TX
+      uint16_t pin_re;      // GPIO pin for remapped TX
    };
 
    void ResetDMA();
@@ -82,6 +88,8 @@ private:
    char inBuf[bufSize];
    char outBuf[2][bufSize]; //double buffering
    char args[bufSize];
+   uint8_t txBuffer[bufSize];
+   uint8_t rxBuffer[bufSize];
 };
 
 #endif // TERMINAL_H

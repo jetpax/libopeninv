@@ -32,15 +32,26 @@ class LinBus
    protected:
 
    private:
-      struct HwInfo
-      {
-         uint32_t usart;
-         uint8_t dmatx;
-         uint8_t dmarx;
-         uint32_t port;
-         uint16_t pin;
-      };
-
+    struct HwInfo
+#ifdef STM32F1
+    {
+      uint32_t usart;
+      uint8_t dmatx;
+      uint8_t dmarx;
+      uint32_t port;
+      uint16_t pin;
+    };
+#else
+    {
+      uint32_t usart;           // USART base address
+      uint32_t dma_controller;  // DMA controller (DMA1 or DMA2)
+      uint8_t dmatx;            // DMA TX stream
+      uint8_t dmarx;            // DMA RX stream
+      uint8_t dma_channel;      // DMA channel (shared by TX/RX)
+      uint32_t port;            // GPIO port
+      uint16_t pin;             // GPIO pin
+    };
+#endif
       static uint8_t Checksum(uint8_t pid, uint8_t* data, int len);
       static uint8_t Parity(uint8_t id);
 

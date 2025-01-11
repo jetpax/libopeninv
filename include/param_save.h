@@ -19,6 +19,8 @@
 #ifndef PARAM_SAVE_H_INCLUDED
 #define PARAM_SAVE_H_INCLUDED
 
+#include <stdint.h>  // Add this to define uint32_t and other integer types
+
 #ifdef __cplusplus
 extern "C"
 {

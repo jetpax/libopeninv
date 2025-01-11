@@ -18,8 +18,9 @@
  */
 #ifndef CANMAP_H
 #define CANMAP_H
-#include "params.h"
 #include "canhardware.h"
+#include "hwdefs.h"
+#include "params.h"
 
 #define CAN_ERR_INVALID_ID -1
 #define CAN_ERR_INVALID_OFS -2
@@ -75,10 +76,11 @@ class CanMap: CanCallback
       bool FindMap(Param::PARAM_NUM param, uint32_t& canId, uint8_t& start, int8_t& length, float& gain, int8_t& offset, bool& rx);
       const CANPOS* GetMap(bool rx, uint8_t ididx, uint8_t itemidx, uint32_t& canId);
       void IterateCanMap(void (*callback)(Param::PARAM_NUM, uint32_t, uint8_t, int8_t, float, int8_t, bool));
-
-   protected:
-
-   private:
+#ifdef STM32F4
+      int GetFlashSector(uint32_t address);
+#endif
+     protected:
+     private:
       static volatile bool isSaving;
 
       struct CANIDMAP

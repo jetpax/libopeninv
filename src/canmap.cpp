@@ -396,6 +396,24 @@ int CanMap::Remove(bool rx, uint8_t messageIdx, uint8_t itemidx)
    return 0;
 }
 
+#ifdef STM32F4
+int CanMap::GetFlashSector(uint32_t address) 
+   {
+   if (address < 0x08004000) return FLASH_SECTOR_0;
+   if (address < 0x08008000) return FLASH_SECTOR_1;
+   if (address < 0x0800C000) return FLASH_SECTOR_2;
+   if (address < 0x08010000) return FLASH_SECTOR_3;
+   if (address < 0x08020000) return FLASH_SECTOR_4;
+   if (address < 0x08040000) return FLASH_SECTOR_5;
+   if (address < 0x08060000) return FLASH_SECTOR_6;
+   if (address < 0x08080000) return FLASH_SECTOR_7;
+   if (address < 0x080A0000) return FLASH_SECTOR_8;
+   if (address < 0x080C0000) return FLASH_SECTOR_9;
+   if (address < 0x080E0000) return FLASH_SECTOR_10;
+   return FLASH_SECTOR_11;  // Up to 1MB of flash
+   }
+#endif
+
 /** \brief Save CAN mapping to flash
  */
 void CanMap::Save()
@@ -413,10 +431,19 @@ void CanMap::Save()
    crc_reset();
 
    flash_unlock();
-   flash_set_ws(2);
 
-   if (check != 0xFFFFFFFF) //Only erase when needed
-      flash_erase_page(baseAddress);
+#ifdef STM32F1
+   flash_set_ws(2);            // For STM32F1, set wait states
+   if (check != 0xFFFFFFFF) {  // Only erase if not already erased
+     flash_erase_page(baseAddress);
+   }
+#else
+   // STM32F4-specific flash erase logic
+   if (check != 0xFFFFFFFF) {                   // Only erase when needed
+     int sector = GetFlashSector(baseAddress);  // Get the sector number
+     flash_erase_sector(sector, FLASH_CR_PROGRAM_X32);  // Erase the sector
+   }
+#endif
 
    ReplaceParamEnumByUid(canSendMap);
    ReplaceParamEnumByUid(canRecvMap);

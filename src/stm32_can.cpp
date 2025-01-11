@@ -28,6 +28,7 @@
 #include <libopencm3/cm3/common.h>
 #include <libopencm3/cm3/nvic.h>
 #include "stm32_can.h"
+#include "hwinit.h"
 
 #define MAX_INTERFACES        2
 #define IDS_PER_BANK          4
@@ -36,6 +37,15 @@
 #ifndef CAN_PERIPH_SPEED
 #define CAN_PERIPH_SPEED 36
 #endif // CAN_PERIPH_SPEED
+
+#ifdef STM32F4
+#define GPIO_CAN2_RX GPIO12     // PB12 for CAN2_RX
+#define GPIO_CAN2_TX GPIO13     // PB13 for CAN2_TX
+#define GPIO_CAN2_RE_RX GPIO12  // PB12 for CAN2_RX
+#define GPIO_CAN2_RE_TX GPIO13  // PB13 for CAN2_TX
+#endif
+
+extern volatile uint32_t rtc_counter;
 
 struct CANSPEED
 {
@@ -85,50 +95,108 @@ Stm32Can::Stm32Can(uint32_t baseAddr, enum baudrates baudrate, bool remap)
 {
    switch (baseAddr)
    {
-      case CAN1:
-         if (remap)
-         {
-            // Configure CAN pin: RX (input pull-up).
-            gpio_set_mode(GPIO_BANK_CAN1_PB_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN1_PB_RX);
-            gpio_set(GPIO_BANK_CAN1_PB_RX, GPIO_CAN1_PB_RX);
-            // Configure CAN pin: TX.-
-            gpio_set_mode(GPIO_BANK_CAN1_PB_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN1_PB_TX);
-         }
-         else
-         {
-            // Configure CAN pin: RX (input pull-up).
-            gpio_set_mode(GPIO_BANK_CAN1_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN1_RX);
-            gpio_set(GPIO_BANK_CAN1_RX, GPIO_CAN1_RX);
-            // Configure CAN pin: TX.-
-            gpio_set_mode(GPIO_BANK_CAN1_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN1_TX);
-         }
+case CAN1:
+    if (remap)
+    {
+#ifdef STM32F1
+        // Configure CAN pin: RX (input pull-up).
+        gpio_set_mode(GPIO_BANK_CAN1_PB_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN1_PB_RX);
+        gpio_set(GPIO_BANK_CAN1_PB_RX, GPIO_CAN1_PB_RX);
+
+        // Configure CAN pin: TX.
+        gpio_set_mode(GPIO_BANK_CAN1_PB_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN1_PB_TX);
+#else
+      // STM32F405 remapped pins: CAN1_RX on PB8, CAN1_TX on PB9
+      gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO8);  // RX
+      gpio_set_af(GPIOB, GPIO_AF9, GPIO8);  // Alternate Function 9 for CAN1_RX
+
+      gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO9);  // TX
+      gpio_set_af(GPIOB, GPIO_AF9, GPIO9);  // Alternate Function 9 for CAN1_TX
+#endif
+    }
+    else
+    {
+#ifdef STM32F1
+        // Configure CAN pin: RX (input pull-up).
+        gpio_set_mode(GPIO_BANK_CAN1_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN1_RX);
+        gpio_set(GPIO_BANK_CAN1_RX, GPIO_CAN1_RX);
+
+        // Configure CAN pin: TX.
+        gpio_set_mode(GPIO_BANK_CAN1_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN1_TX);
+#else
+         // STM32F405 default pins: CAN1_RX on PA11, CAN1_TX on PA12
+         gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO11);  // RX
+         gpio_set_af(GPIOA, GPIO_AF9, GPIO11);  // Alternate Function 9 for CAN1_RX
+
+         gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO12);  // TX
+         gpio_set_af(GPIOA, GPIO_AF9, GPIO12);  // Alternate Function 9 for CAN1_TX
+#endif
+    }
 
          //CAN1 RX and TX IRQs
-         nvic_enable_irq(NVIC_USB_LP_CAN_RX0_IRQ); //CAN RX
-         nvic_set_priority(NVIC_USB_LP_CAN_RX0_IRQ, 0xf << 4); //lowest priority
-         nvic_enable_irq(NVIC_CAN_RX1_IRQ); //CAN RX
-         nvic_set_priority(NVIC_CAN_RX1_IRQ, 0xf << 4); //lowest priority
-         nvic_enable_irq(NVIC_USB_HP_CAN_TX_IRQ); //CAN TX
-         nvic_set_priority(NVIC_USB_HP_CAN_TX_IRQ, 0xf << 4); //lowest priority
-         interfaces[0] = this;
-         break;
-      case CAN2:
-         if (remap)
-         {
-            // Configure CAN pin: RX (input pull-up).
-            gpio_set_mode(GPIO_BANK_CAN2_RE_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN2_RE_RX);
-            gpio_set(GPIO_BANK_CAN2_RE_RX, GPIO_CAN2_RE_RX);
-            // Configure CAN pin: TX.-
-            gpio_set_mode(GPIO_BANK_CAN2_RE_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN2_RE_TX);
-         }
-         else
-         {
-            // Configure CAN pin: RX (input pull-up).
-            gpio_set_mode(GPIO_BANK_CAN2_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN2_RX);
-            gpio_set(GPIO_BANK_CAN2_RX, GPIO_CAN2_RX);
-            // Configure CAN pin: TX.-
-            gpio_set_mode(GPIO_BANK_CAN2_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN2_TX);
-         }
+#ifdef STM32F1
+    // Enable CAN RX0 interrupt for STM32F1
+    nvic_enable_irq(NVIC_USB_LP_CAN_RX0_IRQ);            // USB Low Power & CAN RX0 IRQ
+    nvic_set_priority(NVIC_USB_LP_CAN_RX0_IRQ, 0xF << 4);        // Lowest priority
+   // STM32F1: Enable CAN RX1 interrupt
+    nvic_enable_irq(NVIC_CAN_RX1_IRQ);                   // CAN RX FIFO 1
+    nvic_set_priority(NVIC_CAN_RX1_IRQ, 0xF << 4);       // Lowest priority
+    // STM32F1: Enable CAN TX interrupt
+    nvic_enable_irq(NVIC_USB_HP_CAN_TX_IRQ);              // CAN TX
+    nvic_set_priority(NVIC_USB_HP_CAN_TX_IRQ, 0xF << 4);  // Lowest priority
+#else
+    // Enable CAN1 RX0 interrupt for STM32F4
+    nvic_enable_irq(NVIC_CAN1_RX0_IRQ);                  // CAN1 RX0 IRQ
+    nvic_set_priority(NVIC_CAN1_RX0_IRQ, 0xF << 4);      // Lowest priority
+    // STM32F4: Enable CAN RX1 interrupt
+    nvic_enable_irq(NVIC_CAN1_RX1_IRQ);                  // CAN1 RX FIFO 1
+    nvic_set_priority(NVIC_CAN1_RX1_IRQ, 0xF << 4);      // Lowest priority
+    // STM32F4: Enable CAN TX interrupt
+    nvic_enable_irq(NVIC_CAN1_TX_IRQ);                   // CAN1 TX
+    nvic_set_priority(NVIC_CAN1_TX_IRQ, 0xF << 4);       // Lowest priority
+#endif
+   interfaces[0] = this;
+   break;
+case CAN2:
+    if (remap)
+    {
+#ifdef STM32F1
+        // Configure CAN pin: RX (input pull-up).
+        gpio_set_mode(GPIO_BANK_CAN2_RE_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN2_RE_RX);
+        gpio_set(GPIO_BANK_CAN2_RE_RX, GPIO_CAN2_RE_RX);
+
+        // Configure CAN pin: TX.
+        gpio_set_mode(GPIO_BANK_CAN2_RE_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN2_RE_TX);
+#else
+        // Configure CAN pin: RX (input pull-up).
+        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO_CAN2_RE_RX);
+        gpio_set_af(GPIOB, GPIO_AF9, GPIO_CAN2_RE_RX); // Set alternate function for CAN2_RX (remap)
+
+        // Configure CAN pin: TX.
+        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_CAN2_RE_TX);
+        gpio_set_af(GPIOB, GPIO_AF9, GPIO_CAN2_RE_TX); // Set alternate function for CAN2_TX (remap)
+#endif
+    }
+    else
+    {
+#ifdef STM32F1
+        // Configure CAN pin: RX (input pull-up).
+        gpio_set_mode(GPIO_BANK_CAN2_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN2_RX);
+        gpio_set(GPIO_BANK_CAN2_RX, GPIO_CAN2_RX);
+
+        // Configure CAN pin: TX.
+        gpio_set_mode(GPIO_BANK_CAN2_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN2_TX);
+#else
+        // Configure CAN pin: RX (input pull-up).
+        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO_CAN2_RX);
+        gpio_set_af(GPIOB, GPIO_AF9, GPIO_CAN2_RX); // Set alternate function for CAN2_RX
+
+        // Configure CAN pin: TX.
+        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_CAN2_TX);
+        gpio_set_af(GPIOB, GPIO_AF9, GPIO_CAN2_TX); // Set alternate function for CAN2_TX
+#endif
+    }
+    break;
 
          //CAN2 RX and TX IRQs
          nvic_enable_irq(NVIC_CAN2_RX0_IRQ); //CAN RX
@@ -225,11 +293,12 @@ void Stm32Can::HandleMessage(int fifo)
 	uint8_t length, fmi;
 	uint32_t data[2];
 
-   while (can_receive(canDev, fifo, true, &id, &ext, &rtr, &fmi, &length, (uint8_t*)data, 0) > 0)
-   {
+   // while (can_receive(canDev, fifo, true, &id, &ext, &rtr, &fmi, &length, (uint8_t*)data, 0) > 0)
+   can_receive(canDev, fifo, true, &id, &ext, &rtr, &fmi, &length, (uint8_t*)data, 0);
+   // {
       HandleRx(id, data, length);
       lastRxTimestamp = rtc_get_counter_val();
-   }
+      // }
 }
 
 void Stm32Can::HandleTx()
