@@ -39,12 +39,27 @@ namespace PinMode {
    };
 }
 
+// pin modes for MCP2515
+enum class MCP2515PinMode : uint8_t
+{
+    HI_Z,
+    OUTPUT
+};
+
+//--------------------------------------
+// DigIo class: real STM32 GPIO pins
+//--------------------------------------
 class DigIo
 {
 public:
-   #define DIG_IO_ENTRY(name, port, pin, mode) static DigIo name;
-   DIG_IO_LIST
+   // Macro pass: “DIG_IO_ENTRY” => static DigIo;  “DIG_IO_MCP2515_ENTRY” => do nothing
+   #define DIG_IO_ENTRY(name, port, pin, mode)     static DigIo name;
+   #define DIG_IO_MCP2515_ENTRY(name, channel, pm) /* ignore in this class */
+
+   DIG_IO_LIST  // expands only real pins as static DigIo members
+
    #undef DIG_IO_ENTRY
+   #undef DIG_IO_MCP2515_ENTRY
 
    /** Map GPIO pin object to hardware pin.
     * @param[in] port port to use for this pin
@@ -53,7 +68,6 @@ public:
     * @param[in] invert input or not to use
     */
    void Configure(uint32_t port, uint16_t pin, PinMode::PinMode pinMode);
-
 
    /**
    * Get pin value
@@ -89,8 +103,39 @@ private:
    uint16_t _pin;
    bool _invert;
 };
-//Configure all digio objects from the given list
-#define DIG_IO_ENTRY(name, port, pin, mode) DigIo::name.Configure(port, pin, mode);
-#define DIG_IO_CONFIGURE(l) l
+
+
+extern void MCP2515_PinSet(uint8_t pin, bool state);
+
+//--------------------------------------
+// McpIo class: “virtual” MCP2515 pins
+//--------------------------------------
+class McpIo
+{
+public:
+    // Macro pass: “DIG_IO_MCP2515_ENTRY” => static McpIo;  “DIG_IO_ENTRY” => do nothing
+    #define DIG_IO_ENTRY(name, port, pin, mode)     /* ignore in this class */
+    #define DIG_IO_MCP2515_ENTRY(name, channel, pm) static McpIo name;
+
+    DIG_IO_LIST  // expands only MCP pins as static McpIo members
+
+    #undef DIG_IO_ENTRY
+    #undef DIG_IO_MCP2515_ENTRY
+    void Configure(uint8_t pin, MCP2515PinMode mode);
+
+    void Set() { MCP2515_PinSet(_pin, true); }
+    void Clear()  { MCP2515_PinSet(_pin, false); }   
+
+private:
+    uint8_t _pin = 0;
+    MCP2515PinMode _mode = MCP2515PinMode::HI_Z;
+};
+
+
+// #define DIG_IO_ENTRY(name, port, pin, mode)        name.Configure(port, pin, mode);
+// #define DIG_IO_MCP2515_ENTRY(name, channel, pMode) name.Configure(channel, pMode);
+
+// // The user can do: DIG_IO_CONFIGURE(DIG_IO_LIST) in code to configure all pins.
+// #define DIG_IO_CONFIGURE(LIST) LIST  
 
 #endif // DIGIO_H_INCLUDED

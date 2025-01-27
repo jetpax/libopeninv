@@ -23,10 +23,34 @@
 #define DIG_IO_OFF 0
 #define DIG_IO_ON  1
 
-#undef DIG_IO_ENTRY
-#define DIG_IO_ENTRY(name, port, pin, mode) DigIo DigIo::name;
-DIG_IO_LIST
 
+//-----------------------------
+// Pass #1: define real DigIo pins
+//-----------------------------
+#undef  DIG_IO_ENTRY
+#undef  DIG_IO_MCP2515_ENTRY
+#define DIG_IO_ENTRY(name, port, pin, mode)      DigIo DigIo::name;
+#define DIG_IO_MCP2515_ENTRY(name, channel, pm)  /* ignore here */
+
+DIG_IO_LIST   // expands e.g. DigIo DigIo::mcp_cs; DigIo DigIo::sw_mode0; ...
+
+#undef  DIG_IO_ENTRY
+#undef  DIG_IO_MCP2515_ENTRY
+
+//-----------------------------
+// Pass #2: define MCP2515 pins
+//-----------------------------
+#define DIG_IO_ENTRY(name, port, pin, mode)     /* ignore here */
+#define DIG_IO_MCP2515_ENTRY(name, channel, pm) McpIo McpIo::name;
+
+DIG_IO_LIST   // expands e.g. McpIo McpIo::can1_term; McpIo McpIo::lin_nslp; ...
+
+#undef  DIG_IO_ENTRY
+#undef  DIG_IO_MCP2515_ENTRY
+
+
+
+//Configure for GPIO type
 void DigIo::Configure(uint32_t port, uint16_t pin, PinMode::PinMode pinMode)
 {
     uint32_t pupd = GPIO_PUPD_NONE;
@@ -113,4 +137,23 @@ void DigIo::Configure(uint32_t port, uint16_t pin, PinMode::PinMode pinMode)
         gpio_set_af(port, af, pin); // Set alternate function
     }
 #endif
+}
+
+
+//Configure for MCP2515 type
+extern void MCP2515_PinEn(uint8_t pin, bool state);
+
+void McpIo::Configure(uint8_t pin, MCP2515PinMode mode)  
+{ 
+   switch (mode)
+    {
+        default:
+        case MCP2515PinMode::HI_Z:
+            MCP2515_PinEn(pin, false);         
+            break;
+
+        case MCP2515PinMode::OUTPUT:
+            MCP2515_PinEn(pin, true);         
+            break;
+    }
 }
