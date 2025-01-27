@@ -24,33 +24,25 @@
 #define DIG_IO_ON  1
 
 
-//-----------------------------
-// Pass #1: define real DigIo pins
-//-----------------------------
-#undef  DIG_IO_ENTRY
-#undef  DIG_IO_MCP2515_ENTRY
-#define DIG_IO_ENTRY(name, port, pin, mode)      DigIo DigIo::name;
-#define DIG_IO_MCP2515_ENTRY(name, channel, pm)  /* ignore here */
-
-DIG_IO_LIST   // expands e.g. DigIo DigIo::mcp_cs; DigIo DigIo::sw_mode0; ...
-
+/* 
+ * Expand macros to define the static members.
+ *    Real pins => `DigIo DigIo::name;`
+ *    MCP pins => `McpIo DigIo::name;`
+ */
 #undef  DIG_IO_ENTRY
 #undef  DIG_IO_MCP2515_ENTRY
 
-//-----------------------------
-// Pass #2: define MCP2515 pins
-//-----------------------------
-#define DIG_IO_ENTRY(name, port, pin, mode)     /* ignore here */
-#define DIG_IO_MCP2515_ENTRY(name, channel, pm) McpIo McpIo::name;
+#define DIG_IO_ENTRY(name, port, pin, mode)     DigIo DigIo::name;
+#define DIG_IO_MCP2515_ENTRY(name, channel, pm) McpIo DigIo::name;
 
-DIG_IO_LIST   // expands e.g. McpIo McpIo::can1_term; McpIo McpIo::lin_nslp; ...
+DIG_IO_LIST
 
-#undef  DIG_IO_ENTRY
-#undef  DIG_IO_MCP2515_ENTRY
+#undef DIG_IO_ENTRY
+#undef DIG_IO_MCP2515_ENTRY
 
-
-
-//Configure for GPIO type
+//---------------------------------------
+// Implementation of DigIo methods
+//---------------------------------------
 void DigIo::Configure(uint32_t port, uint16_t pin, PinMode::PinMode pinMode)
 {
     uint32_t pupd = GPIO_PUPD_NONE;

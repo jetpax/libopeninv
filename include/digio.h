@@ -46,20 +46,23 @@ enum class MCP2515PinMode : uint8_t
     OUTPUT
 };
 
+class McpIo;
+
 //--------------------------------------
 // DigIo class: real STM32 GPIO pins
 //--------------------------------------
 class DigIo
 {
 public:
-   // Macro pass: “DIG_IO_ENTRY” => static DigIo;  “DIG_IO_MCP2515_ENTRY” => do nothing
-   #define DIG_IO_ENTRY(name, port, pin, mode)     static DigIo name;
-   #define DIG_IO_MCP2515_ENTRY(name, channel, pm) /* ignore in this class */
+    // Macro pass to declare real pins -> `static DigIo name;`
+    // and MCP pins -> `static McpIo name;`
+    #define DIG_IO_ENTRY(name, port, pin, mode)     static DigIo name;
+    #define DIG_IO_MCP2515_ENTRY(name, channel, pm) static McpIo name;
 
-   DIG_IO_LIST  // expands only real pins as static DigIo members
+    DIG_IO_LIST  // expands all real & MCP pins into static members
 
-   #undef DIG_IO_ENTRY
-   #undef DIG_IO_MCP2515_ENTRY
+    #undef DIG_IO_ENTRY
+    #undef DIG_IO_MCP2515_ENTRY
 
    /** Map GPIO pin object to hardware pin.
     * @param[in] port port to use for this pin
@@ -113,14 +116,6 @@ extern void MCP2515_PinSet(uint8_t pin, bool state);
 class McpIo
 {
 public:
-    // Macro pass: “DIG_IO_MCP2515_ENTRY” => static McpIo;  “DIG_IO_ENTRY” => do nothing
-    #define DIG_IO_ENTRY(name, port, pin, mode)     /* ignore in this class */
-    #define DIG_IO_MCP2515_ENTRY(name, channel, pm) static McpIo name;
-
-    DIG_IO_LIST  // expands only MCP pins as static McpIo members
-
-    #undef DIG_IO_ENTRY
-    #undef DIG_IO_MCP2515_ENTRY
     void Configure(uint8_t pin, MCP2515PinMode mode);
 
     void Set() { MCP2515_PinSet(_pin, true); }
@@ -132,10 +127,10 @@ private:
 };
 
 
-// #define DIG_IO_ENTRY(name, port, pin, mode)        name.Configure(port, pin, mode);
-// #define DIG_IO_MCP2515_ENTRY(name, channel, pMode) name.Configure(channel, pMode);
+#define DIG_IO_ENTRY(name, port, pin, mode)        name.Configure(port, pin, mode);
+#define DIG_IO_MCP2515_ENTRY(name, channel, pMode) name.Configure(channel, pMode);
 
-// // The user can do: DIG_IO_CONFIGURE(DIG_IO_LIST) in code to configure all pins.
-// #define DIG_IO_CONFIGURE(LIST) LIST  
+// The user can do: DIG_IO_CONFIGURE(DIG_IO_LIST) in code to configure all pins.
+#define DIG_IO_CONFIGURE(LIST) LIST  
 
 #endif // DIGIO_H_INCLUDED
