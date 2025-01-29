@@ -137,6 +137,8 @@ extern void MCP2515_PinEn(uint8_t pin, bool state);
 
 void McpIo::Configure(uint8_t pin, MCP2515PinMode mode)  
 { 
+    _pin = pin;
+    
    switch (mode)
     {
         default:
