@@ -118,9 +118,9 @@ class McpIo
 public:
     void Configure(uint8_t pin, MCP2515PinMode mode);
 
-    void Set() { MCP2515_Out_Pin(_pin, true); }
-    void Clear()  { MCP2515_Out_Pin(_pin, false); }   
-    void Toggle() { MCP2515_Out_Pin(_pin, _last ? false :true), _last = !_last;}
+    void Set() { MCP2515_Out_Pin(_pin, true), _last = true; }
+    void Clear()  { MCP2515_Out_Pin(_pin, false), _last = false; }   
+    void Toggle() { MCP2515_Out_Pin(_pin, _last ? false :true), _last ^= 1;}
 
 private:
     uint16_t _pin;
@@ -132,7 +132,6 @@ private:
 #define DIG_IO_ENTRY(name, port, pin, mode)        DigIo::name.Configure(port, pin, mode);
 #define DIG_IO_MCP2515_ENTRY(name, channel, pMode) DigIo::name.Configure(channel, pMode);
 
-// The user can do: DIG_IO_CONFIGURE(DIG_IO_LIST) in code to configure all pins.
-#define DIG_IO_CONFIGURE(LIST) LIST  
+#define DIG_IO_CONFIGURE(LIST) LIST  // configures all real & MCP pins
 
 #endif // DIGIO_H_INCLUDED

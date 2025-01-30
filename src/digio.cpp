@@ -24,11 +24,6 @@
 #define DIG_IO_ON  1
 
 
-/* 
- * Expand macros to define the static members.
- *    Real pins => `DigIo DigIo::name;`
- *    MCP pins => `McpIo DigIo::name;`
- */
 #undef  DIG_IO_ENTRY
 #undef  DIG_IO_MCP2515_ENTRY
 
@@ -40,9 +35,7 @@ DIG_IO_LIST
 #undef DIG_IO_ENTRY
 #undef DIG_IO_MCP2515_ENTRY
 
-//---------------------------------------
-// Implementation of DigIo methods
-//---------------------------------------
+
 void DigIo::Configure(uint32_t port, uint16_t pin, PinMode::PinMode pinMode)
 {
     uint32_t pupd = GPIO_PUPD_NONE;
@@ -110,7 +103,7 @@ void DigIo::Configure(uint32_t port, uint16_t pin, PinMode::PinMode pinMode)
             pupd = GPIO_CNF_OUTPUT_ALTFN_PUSHPULL;
 #else
             mode = GPIO_MODE_AF;
-            af = GPIO_AF0; // Set the alternate function (adjust as needed)
+            af = GPIO_AF0; 
 #endif
             break;
     }
@@ -126,7 +119,7 @@ void DigIo::Configure(uint32_t port, uint16_t pin, PinMode::PinMode pinMode)
     gpio_mode_setup(port, mode, pupd, pin);
     if (mode == GPIO_MODE_AF)
     {
-        gpio_set_af(port, af, pin); // Set alternate function
+        gpio_set_af(port, af, pin); 
     }
 #endif
 }
