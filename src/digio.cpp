@@ -25,15 +25,15 @@
 
 
 #undef  DIG_IO_ENTRY
-#undef  DIG_IO_MCP2515_ENTRY
+#undef  BUS_IO_ENTRY
 
 #define DIG_IO_ENTRY(name, port, pin, mode)     DigIo DigIo::name;
-#define DIG_IO_MCP2515_ENTRY(name, channel, pm) McpIo DigIo::name;
+#define BUS_IO_ENTRY(name, type, channel, pm)   BusIo DigIo::name;
 
 DIG_IO_LIST
 
+#undef BUS_IO_ENTRY
 #undef DIG_IO_ENTRY
-#undef DIG_IO_MCP2515_ENTRY
 
 
 void DigIo::Configure(uint32_t port, uint16_t pin, PinMode::PinMode pinMode)
@@ -124,23 +124,3 @@ void DigIo::Configure(uint32_t port, uint16_t pin, PinMode::PinMode pinMode)
 #endif
 }
 
-
-//Configure for MCP2515 type
-extern void MCP2515_PinEn(uint8_t pin, bool state);
-
-void McpIo::Configure(uint8_t pin, MCP2515PinMode mode)  
-{ 
-    _pin = pin;
-    
-   switch (mode)
-    {
-        default:
-        case MCP2515PinMode::HI_Z:
-            MCP2515_PinEn(pin, false);         
-            break;
-
-        case MCP2515PinMode::OUTPUT:
-            MCP2515_PinEn(pin, true);         
-            break;
-    }
-}

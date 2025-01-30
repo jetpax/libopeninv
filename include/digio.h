@@ -21,6 +21,8 @@
 
 #include <libopencm3/stm32/gpio.h>
 #include "digio_prj.h"
+#include "busio.h"
+
 
 namespace PinMode {
    enum PinMode
@@ -39,15 +41,6 @@ namespace PinMode {
    };
 }
 
-// pin modes for MCP2515
-enum class MCP2515PinMode : uint8_t
-{
-    HI_Z,
-    OUTPUT
-};
-
-class McpIo;
-
 //--------------------------------------
 // DigIo class: real STM32 GPIO pins
 //--------------------------------------
@@ -57,12 +50,13 @@ public:
     // Macro pass to declare real pins -> `static DigIo name;`
     // and MCP pins -> `static McpIo name;`
     #define DIG_IO_ENTRY(name, port, pin, mode)     static DigIo name;
-    #define DIG_IO_MCP2515_ENTRY(name, channel, pm) static McpIo name;
-
+    #define BUS_IO_ENTRY(name, type, channel, pm) static BusIo name;
+    
     DIG_IO_LIST  // expands all real & MCP pins into static members
 
     #undef DIG_IO_ENTRY
-    #undef DIG_IO_MCP2515_ENTRY
+    #undef BUS_IO_ENTRY
+
 
    /** Map GPIO pin object to hardware pin.
     * @param[in] port port to use for this pin
@@ -107,31 +101,9 @@ private:
    bool _invert;
 };
 
-
-extern void MCP2515_Out_Pin(uint8_t pin, bool state);
-
-//--------------------------------------
-// McpIo class: “virtual” MCP2515 pins
-//--------------------------------------
-class McpIo
-{
-public:
-    void Configure(uint8_t pin, MCP2515PinMode mode);
-
-    void Set() { MCP2515_Out_Pin(_pin, true), _last = true; }
-    void Clear()  { MCP2515_Out_Pin(_pin, false), _last = false; }   
-    void Toggle() { MCP2515_Out_Pin(_pin, _last ? false :true), _last ^= 1;}
-
-private:
-    uint16_t _pin;
-    bool _last=0;
-    MCP2515PinMode mode = MCP2515PinMode::HI_Z;
-};
-
-
 #define DIG_IO_ENTRY(name, port, pin, mode)        DigIo::name.Configure(port, pin, mode);
-#define DIG_IO_MCP2515_ENTRY(name, channel, pMode) DigIo::name.Configure(channel, pMode);
+#define BUS_IO_ENTRY(name, busType, channel, pMode) DigIo::name.Configure(busType, channel, pMode);
 
-#define DIG_IO_CONFIGURE(LIST) LIST  // configures all real & MCP pins
+#define DIG_IO_CONFIGURE(LIST) LIST  // configures on-chip and & Bus pins
 
 #endif // DIGIO_H_INCLUDED
