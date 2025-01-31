@@ -58,8 +58,8 @@ const Terminal::HwInfo Terminal::hwInfo[] =
 const Terminal::HwInfo Terminal::hwInfo[] =
 {
     { USART1, DMA2, DMA_STREAM7, DMA_STREAM2, 4, GPIOA, GPIO_USART1_TX, GPIOB, GPIO_USART1_RE_TX }, // CTRL 2, CH 4, STR 7&2, PA9, PB6
-    { USART2, DMA1, DMA_STREAM6, DMA_STREAM5, 4, GPIOA, GPIO_USART2_TX, GPIOD, GPIO_USART2_RE_TX }, // CTRL 1, CH 4, STR 6&5, PA2, PB6
-    { USART3, DMA1, DMA_STREAM3, DMA_STREAM1, 4, GPIOB, GPIO_USART3_TX, GPIOC, GPIO_USART3_RE_TX }, // CTRL 1, CH 4, STR 3&1, PB10, PC10
+    { USART2, DMA1, DMA_STREAM6, DMA_STREAM5, 4, GPIOA, GPIO2, GPIOA, GPIO3 },  // USART2 TX: PA2, RX: PA3
+    { USART3, DMA1, DMA_STREAM3, DMA_STREAM1, 4, GPIOB, GPIO10, GPIOB, GPIO11 }, // USART3 TX: PB10, RX: PB11
     { UART4,  DMA1, DMA_STREAM4, DMA_STREAM2, 4, GPIOC, GPIO_UART4_TX,  GPIOC, GPIO_UART4_RE_TX }   // CTRL 1, CH 4, STR 4&2, PA0, PC10
 };
 #endif
@@ -91,12 +91,15 @@ Terminal::Terminal(uint32_t usart, const TERM_CMD* commands, bool remap, bool ec
    defaultTerminal = this;
 
 #ifdef STM32F1
+
     gpio_set_mode(remap ? hw->port_re : hw->port, GPIO_MODE_OUTPUT_50_MHZ,
                   GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, remap ? hw->pin_re : hw->pin);
+
 #else
-    gpio_mode_setup(remap ? hw->port_re : hw->port, GPIO_MODE_AF, GPIO_PUPD_NONE,
-                    remap ? hw->pin_re : hw->pin);
-    gpio_set_af(remap ? hw->port_re : hw->port, GPIO_AF9, remap ? hw->pin_re : hw->pin);
+
+    gpio_mode_setup(hw->port, GPIO_MODE_AF, GPIO_PUPD_NONE, hw->pin);
+    gpio_set_af(hw->port, GPIO_AF7, hw->pin);
+
 #endif
 
    usart_set_baudrate(usart, USART_BAUDRATE);
@@ -344,9 +347,9 @@ void Terminal::EnableUart(char* arg)
                   GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, remap ? hw->pin_re : hw->pin);
 #else
     // STM32F4: Configure GPIO mode and set alternate function
-    gpio_mode_setup(remap ? hw->port_re : hw->port, GPIO_MODE_AF, GPIO_PUPD_NONE,
-                    remap ? hw->pin_re : hw->pin);
-    gpio_set_af(remap ? hw->port_re : hw->port, GPIO_AF9, remap ? hw->pin_re : hw->pin); // Adjust GPIO_AF9 based on peripheral
+   gpio_mode_setup(hw->port, GPIO_MODE_AF, GPIO_PUPD_NONE, hw->pin);
+   gpio_set_af(hw->port, GPIO_AF7, hw->pin);
+ 
 #endif
       Send("OK\r\n");
    }
