@@ -38,13 +38,6 @@
 #define CAN_PERIPH_SPEED 36
 #endif // CAN_PERIPH_SPEED
 
-#ifdef STM32F4
-#define GPIO_CAN2_RX GPIO12     // PB12 for CAN2_RX
-#define GPIO_CAN2_TX GPIO13     // PB13 for CAN2_TX
-#define GPIO_CAN2_RE_RX GPIO12  // PB12 for CAN2_RX
-#define GPIO_CAN2_RE_TX GPIO13  // PB13 for CAN2_TX
-#endif
-
 extern volatile uint32_t rtc_counter;
 
 struct CANSPEED
@@ -169,12 +162,12 @@ case CAN2:
         gpio_set_mode(GPIO_BANK_CAN2_RE_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN2_RE_TX);
 #else
         // Configure CAN pin: RX (input pull-up).
-        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO_CAN2_RE_RX);
-        gpio_set_af(GPIOB, GPIO_AF9, GPIO_CAN2_RE_RX); // Set alternate function for CAN2_RX (remap)
+        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO12);
+        gpio_set_af(GPIOB, GPIO_AF9, GPIO12); // Set alternate function for CAN2_RX (remap)
 
         // Configure CAN pin: TX.
-        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_CAN2_RE_TX);
-        gpio_set_af(GPIOB, GPIO_AF9, GPIO_CAN2_RE_TX); // Set alternate function for CAN2_TX (remap)
+        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO13);
+        gpio_set_af(GPIOB, GPIO_AF9, GPIO13); // Set alternate function for CAN2_TX (remap)
 #endif
     }
     else
@@ -188,12 +181,12 @@ case CAN2:
         gpio_set_mode(GPIO_BANK_CAN2_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN2_TX);
 #else
         // Configure CAN pin: RX (input pull-up).
-        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO_CAN2_RX);
-        gpio_set_af(GPIOB, GPIO_AF9, GPIO_CAN2_RX); // Set alternate function for CAN2_RX
+        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO12);
+        gpio_set_af(GPIOB, GPIO_AF9, GPIO12); // Set alternate function for CAN2_RX
 
         // Configure CAN pin: TX.
-        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO_CAN2_TX);
-        gpio_set_af(GPIOB, GPIO_AF9, GPIO_CAN2_TX); // Set alternate function for CAN2_TX
+        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO13);
+        gpio_set_af(GPIOB, GPIO_AF9, GPIO13); // Set alternate function for CAN2_TX
 #endif
     }
     break;
