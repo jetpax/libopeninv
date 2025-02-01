@@ -23,18 +23,15 @@
 #define DIG_IO_OFF 0
 #define DIG_IO_ON  1
 
+#undef DIG_IO_ENTRY
+#define DIG_IO_ENTRY(name, port, pin, mode) DigIo DigIo::name;
 
-#undef  DIG_IO_ENTRY
+#ifdef BUSIO_ENABLED    
 #undef  BUS_IO_ENTRY
-
-#define DIG_IO_ENTRY(name, port, pin, mode)     DigIo DigIo::name;
-#define BUS_IO_ENTRY(name, type, channel, pm)   BusIo DigIo::name;
+#define BUS_IO_ENTRY(name, busType, channel, mode) BusIo DigIo::name;
+#endif
 
 DIG_IO_LIST
-
-#undef BUS_IO_ENTRY
-#undef DIG_IO_ENTRY
-
 
 void DigIo::Configure(uint32_t port, uint16_t pin, PinMode::PinMode pinMode)
 {
