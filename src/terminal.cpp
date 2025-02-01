@@ -31,19 +31,6 @@
 #define USART_BAUDRATE 115200
 #endif // USART_BAUDRATE
 
-#ifdef STM32F4
-#define GPIO_USART1_TX GPIO9     // PA9
-#define GPIO_USART1_RE_TX GPIO2  // PB6
-
-#define GPIO_USART2_TX GPIO9     // PA2
-#define GPIO_USART2_RE_TX GPIO5  // PD5
-
-#define GPIO_USART3_TX GPIO10    // PB10
-#define GPIO_USART3_RE_TX GPIO10  // PC10
-
-#define GPIO_UART4_TX GPIO0      // PA0
-#define GPIO_UART4_RE_TX GPIO10  // PC10
-#endif
 
 #ifdef STM32F1
 const Terminal::HwInfo Terminal::hwInfo[] =
@@ -57,10 +44,9 @@ const Terminal::HwInfo Terminal::hwInfo[] =
 #else
 const Terminal::HwInfo Terminal::hwInfo[] =
 {
-    { USART1, DMA2, DMA_STREAM7, DMA_STREAM2, 4, GPIOA, GPIO_USART1_TX, GPIOB, GPIO_USART1_RE_TX }, // CTRL 2, CH 4, STR 7&2, PA9, PB6
-    { USART2, DMA1, DMA_STREAM6, DMA_STREAM5, 4, GPIOA, GPIO2, GPIOA, GPIO3 },  // USART2 TX: PA2, RX: PA3
-    { USART3, DMA1, DMA_STREAM3, DMA_STREAM1, 4, GPIOB, GPIO10, GPIOB, GPIO11 }, // USART3 TX: PB10, RX: PB11
-    { UART4,  DMA1, DMA_STREAM4, DMA_STREAM2, 4, GPIOC, GPIO_UART4_TX,  GPIOC, GPIO_UART4_RE_TX }   // CTRL 1, CH 4, STR 4&2, PA0, PC10
+    { USART1, DMA2, DMA_STREAM7, DMA_STREAM2, DMA_SxCR_CHSEL_4, GPIOA, GPIO9, GPIOA, GPIO10},      // USART1 TX: PA9, RX: PA10
+    { USART2, DMA1, DMA_STREAM6, DMA_STREAM5, DMA_SxCR_CHSEL_4, GPIOA, GPIO2, GPIOA, GPIO3 },      // USART2 TX: PA2, RX: PA3
+    { USART3, DMA1, DMA_STREAM3, DMA_STREAM1, DMA_SxCR_CHSEL_4, GPIOB, GPIO10, GPIOB, GPIO11 },    // USART3 TX: PB10, RX: PB11
 };
 #endif
 
@@ -97,10 +83,10 @@ Terminal::Terminal(uint32_t usart, const TERM_CMD* commands, bool remap, bool ec
 
 #else
 
-    // gpio_mode_setup(hw->port, GPIO_MODE_AF, GPIO_PUPD_NONE, hw->pin);
-    // gpio_set_af(hw->port, GPIO_AF7, hw->pin);
-    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO2 | GPIO3);
-    gpio_set_af(GPIOA, GPIO_AF7, GPIO2 | GPIO3);
+    gpio_mode_setup(hw->port_tx, GPIO_MODE_AF, GPIO_PUPD_NONE, hw->pin_tx);
+    gpio_set_af(hw->port_tx, GPIO_AF7, hw->pin_tx);
+    gpio_mode_setup(hw->port_rx, GPIO_MODE_AF, GPIO_PUPD_PULLUP, hw->pin_rx);
+    gpio_set_af(hw->port_rx, GPIO_AF7, hw->pin_rx);
 
 #endif
 
@@ -114,6 +100,7 @@ Terminal::Terminal(uint32_t usart, const TERM_CMD* commands, bool remap, bool ec
    usart_enable_tx_dma(usart);
 
 #ifdef STM32F1
+
    dma_channel_reset(hw->dmactl, hw->dmatx);
    dma_set_read_from_memory(hw->dmactl, hw->dmatx);
    dma_set_peripheral_address(hw->dmactl, hw->dmatx, (uint32_t)&USART_DR(usart));
@@ -127,27 +114,39 @@ Terminal::Terminal(uint32_t usart, const TERM_CMD* commands, bool remap, bool ec
    dma_set_memory_size(hw->dmactl, hw->dmarx, DMA_CCR_MSIZE_8BIT);
    dma_enable_memory_increment_mode(hw->dmactl, hw->dmarx);
    dma_enable_channel(hw->dmactl, hw->dmarx);
+
 #else
+
+    dma_disable_stream(hw->dmactl, hw->dmatx);  // Ensure DMA disabled first
+    while (DMA2_S7CR & DMA_SxCR_EN); // Wait until fully disabled
+
     dma_stream_reset(hw->dmactl, hw->dmatx);
-    dma_channel_select(hw->dmactl, hw->dmatx, DMA_SxCR_CHSEL_4); // Channel 4 for USART TX
+    dma_channel_select(hw->dmactl, hw->dmatx, hw->dmaChannel); 
     dma_set_transfer_mode(hw->dmactl, hw->dmatx, DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
     dma_set_peripheral_address(hw->dmactl, hw->dmatx, (uint32_t)&USART_DR(usart));
-    dma_set_memory_address(hw->dmactl, hw->dmatx, (uint32_t)txBuffer);
+    dma_set_memory_address(hw->dmactl, hw->dmatx, (uint32_t)outBuf);
     dma_set_number_of_data(hw->dmactl, hw->dmatx, bufSize);
     dma_set_memory_size(hw->dmactl, hw->dmatx, DMA_SxCR_MSIZE_8BIT);
     dma_enable_memory_increment_mode(hw->dmactl, hw->dmatx);
+    dma_enable_stream(hw->dmactl, hw->dmatx); // **ENABLE TX DMA STREAM**
+
+    dma_disable_stream(hw->dmactl, hw->dmarx); // Ensure DMA disabled first
+    while (DMA2_S2CR & DMA_SxCR_EN);;  // Wait until fully disabled
 
     dma_stream_reset(hw->dmactl, hw->dmarx);
-    dma_channel_select(hw->dmactl, hw->dmarx, DMA_SxCR_CHSEL_4); // Channel 4 for USART RX
+    dma_channel_select(hw->dmactl, hw->dmarx, hw->dmaChannel); 
     dma_set_transfer_mode(hw->dmactl, hw->dmarx, DMA_SxCR_DIR_PERIPHERAL_TO_MEM);
     dma_set_peripheral_address(hw->dmactl, hw->dmarx, (uint32_t)&USART_DR(usart));
-    dma_set_memory_address(hw->dmactl, hw->dmarx, (uint32_t)rxBuffer);
-    dma_set_number_of_data(hw->dmactl, hw->dmarx, bufSize);
+    dma_set_peripheral_size(hw->dmactl, hw->dmarx, DMA_SxCR_PSIZE_8BIT);
+    dma_set_memory_address(hw->dmactl, hw->dmarx, (uint32_t)inBuf);
     dma_set_memory_size(hw->dmactl, hw->dmarx, DMA_SxCR_MSIZE_8BIT);
     dma_enable_memory_increment_mode(hw->dmactl, hw->dmarx);
+    dma_set_number_of_data(hw->dmactl, hw->dmarx, bufSize);
     dma_enable_stream(hw->dmactl, hw->dmarx);
+
 #endif
-   ResetDMA();
+
+//    ResetDMA();
 
    usart_enable(usart);
 }
@@ -167,11 +166,11 @@ void Terminal::Run()
    if (usart_get_flag(usart, USART_SR_ORE))
       usart_recv(usart); //Clear possible overrun
 
-    if (usart_get_flag(USART2, USART_SR_RXNE))
-    {
-        char received = usart_recv(USART2);
-        printf("Received: %c\n", received);
-    }
+    // if (usart_get_flag(USART2, USART_SR_RXNE))
+    // {
+    //     char received = usart_recv(USART2);
+    //     printf("Received: %c\n", received);
+    // }
 
    if (currentIdx > 0)
    {
@@ -355,9 +354,8 @@ void Terminal::EnableUart(char* arg)
                   GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, remap ? hw->pin_re : hw->pin);
 #else
     // STM32F4: Configure GPIO mode and set alternate function
-   gpio_mode_setup(hw->port, GPIO_MODE_AF, GPIO_PUPD_NONE, hw->pin);
-   gpio_set_af(hw->port, GPIO_AF7, hw->pin);
- 
+    gpio_mode_setup(hw->port_tx, GPIO_MODE_AF, GPIO_PUPD_NONE, hw->pin_tx);
+    gpio_set_af(hw->port_tx, GPIO_AF7, hw->pin_tx);
 #endif
       Send("OK\r\n");
    }
@@ -368,8 +366,7 @@ void Terminal::EnableUart(char* arg)
       gpio_set_mode(remap ? hw->port_re : hw->port, GPIO_MODE_INPUT,
                     GPIO_CNF_INPUT_FLOAT, remap ? hw->pin_re : hw->pin);
 #else
-      gpio_mode_setup(remap ? hw->port_re : hw->port, GPIO_MODE_INPUT,
-                      GPIO_PUPD_NONE, remap ? hw->pin_re : hw->pin);
+    gpio_mode_setup(hw->port_tx, GPIO_MODE_INPUT, GPIO_PUPD_NONE, hw->pin_tx);
 #endif
    }
 }
