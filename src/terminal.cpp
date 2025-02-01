@@ -97,8 +97,10 @@ Terminal::Terminal(uint32_t usart, const TERM_CMD* commands, bool remap, bool ec
 
 #else
 
-    gpio_mode_setup(hw->port, GPIO_MODE_AF, GPIO_PUPD_NONE, hw->pin);
-    gpio_set_af(hw->port, GPIO_AF7, hw->pin);
+    // gpio_mode_setup(hw->port, GPIO_MODE_AF, GPIO_PUPD_NONE, hw->pin);
+    // gpio_set_af(hw->port, GPIO_AF7, hw->pin);
+    gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO2 | GPIO3);
+    gpio_set_af(GPIOA, GPIO_AF7, GPIO2 | GPIO3);
 
 #endif
 
@@ -164,6 +166,12 @@ void Terminal::Run()
 
    if (usart_get_flag(usart, USART_SR_ORE))
       usart_recv(usart); //Clear possible overrun
+
+    if (usart_get_flag(USART2, USART_SR_RXNE))
+    {
+        char received = usart_recv(USART2);
+        printf("Received: %c\n", received);
+    }
 
    if (currentIdx > 0)
    {
