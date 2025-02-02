@@ -333,10 +333,10 @@ void Terminal::ResetDMA()
    dma_set_number_of_data(hw->dmactl, hw->dmarx, bufSize);
    dma_enable_channel(hw->dmactl, hw->dmarx);
 #else
-   dma_disable_stream(hw->dmactl, hw->dmarx); // STM32F4 API
-   dma_set_memory_address(hw->dmactl, hw->dmarx, (uint32_t)inBuf);
+   dma_disable_stream(hw->dmactl, hw->dmarx); 
    dma_set_number_of_data(hw->dmactl, hw->dmarx, bufSize);
-   dma_enable_stream(hw->dmactl, hw->dmarx); // STM32F4 API
+   dma_clear_interrupt_flags(hw->dmactl, hw->dmarx, DMA_TCIF);
+   dma_enable_stream(hw->dmactl, hw->dmarx); 
 #endif
 }
 
