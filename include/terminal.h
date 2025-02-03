@@ -68,7 +68,8 @@ private:
 #endif      
    };
 
-   void ResetDMA();
+   void ResetRxDMA();
+   void ResetTxDMA();
    const TERM_CMD *CmdLookup(char *buf);
    void EnableUart(char* arg);
    void FastUart(char* arg);

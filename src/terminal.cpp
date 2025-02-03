@@ -24,6 +24,7 @@
 #include <libopencm3/stm32/dma.h>
 #include "terminal.h"
 #include "printf.h"
+#include <cstring>
 
 #define HWINFO_ENTRIES (sizeof(hwInfo) / sizeof(struct HwInfo))
 
@@ -117,150 +118,112 @@ Terminal::Terminal(uint32_t usart, const TERM_CMD* commands, bool remap, bool ec
 
 #else
 
-    dma_disable_stream(hw->dmactl, hw->dmatx);  // Ensure DMA disabled first
-    while (DMA2_S7CR & DMA_SxCR_EN); // Wait until fully disabled
-
-    dma_stream_reset(hw->dmactl, hw->dmatx);
-    dma_channel_select(hw->dmactl, hw->dmatx, hw->dmaChannel); 
-    dma_set_transfer_mode(hw->dmactl, hw->dmatx, DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
-    dma_set_peripheral_address(hw->dmactl, hw->dmatx, (uint32_t)&USART_DR(usart));
-    dma_set_memory_address(hw->dmactl, hw->dmatx, (uint32_t)outBuf);
-    dma_set_number_of_data(hw->dmactl, hw->dmatx, bufSize);
-    dma_set_memory_size(hw->dmactl, hw->dmatx, DMA_SxCR_MSIZE_8BIT);
-    dma_enable_memory_increment_mode(hw->dmactl, hw->dmatx);
-    dma_enable_stream(hw->dmactl, hw->dmatx); // **ENABLE TX DMA STREAM**
-
-    dma_disable_stream(hw->dmactl, hw->dmarx); // Ensure DMA disabled first
-    while (DMA2_S2CR & DMA_SxCR_EN);;  // Wait until fully disabled
-
-    dma_stream_reset(hw->dmactl, hw->dmarx);
-    dma_channel_select(hw->dmactl, hw->dmarx, hw->dmaChannel); 
-    dma_set_transfer_mode(hw->dmactl, hw->dmarx, DMA_SxCR_DIR_PERIPHERAL_TO_MEM);
-    dma_set_peripheral_address(hw->dmactl, hw->dmarx, (uint32_t)&USART_DR(usart));
-    dma_set_peripheral_size(hw->dmactl, hw->dmarx, DMA_SxCR_PSIZE_8BIT);
-    dma_set_memory_address(hw->dmactl, hw->dmarx, (uint32_t)inBuf);
-    dma_set_memory_size(hw->dmactl, hw->dmarx, DMA_SxCR_MSIZE_8BIT);
-    dma_enable_memory_increment_mode(hw->dmactl, hw->dmarx);
-    dma_set_number_of_data(hw->dmactl, hw->dmarx, bufSize);
-    dma_enable_stream(hw->dmactl, hw->dmarx);
+    ResetTxDMA();
+    ResetRxDMA();
 
 #endif
-
-//    ResetDMA();
 
    usart_enable(usart);
 }
 
-/** Run the terminal */
+// /** Run the terminal */
 void Terminal::Run()
 {
-   int unusedBytes = dma_get_number_of_data(hw->dmactl, hw->dmarx);
-   int currentIdx = bufSize - unusedBytes;
+    // Get the number of bytes remaining in the DMA transfer.
+    // In circular mode, NDTR reloads automatically; thus,
+    // the "write pointer" (i.e. how many bytes have been received) is:
+    int ndtr = dma_get_number_of_data(hw->dmactl, hw->dmarx);
+    int currentIdx = (bufSize - ndtr) % bufSize; // new hardware write index
 
-   if (0 == unusedBytes)
-      ResetDMA();
+    // Process all newly received characters from lastIdx up to currentIdx
+    while (lastIdx != currentIdx)
+    {
+        char c = inBuf[lastIdx];
+        lastIdx = (lastIdx + 1) % bufSize;
+        if (echo)
+            usart_send_blocking(usart, c);
+    }
 
-   while (echo && lastIdx < currentIdx) //echo
-      usart_send_blocking(usart, inBuf[lastIdx++]);
+    // Check if we have received any new data
+    if (currentIdx != 0)
+    {
+        // Compute the index of the last received character in the ring buffer.
+        int lastCharIdx = (currentIdx + bufSize - 1) % bufSize;
 
-   if (usart_get_flag(usart, USART_SR_ORE))
-      usart_recv(usart); //Clear possible overrun
-
-    // if (usart_get_flag(USART2, USART_SR_RXNE))
-    // {
-    //     char received = usart_recv(USART2);
-    //     printf("Received: %c\n", received);
-    // }
-
-   if (currentIdx > 0)
-   {
-      if (inBuf[currentIdx - 1] == '\n' || inBuf[currentIdx - 1] == '\r')
-      {
-         //Do not accept a new command while processing the current one
+        // If the most recently received character is a newline or carriage return,
+        // consider the command complete.
+        if (inBuf[lastCharIdx] == '\n' || inBuf[lastCharIdx] == '\r')
+        {
+            // Temporarily disable the DMA RX stream to avoid new writes while processing.
 #ifdef STM32F1
-         dma_disable_channel(hw->dmactl, hw->dmarx);
+            dma_disable_channel(hw->dmactl, hw->dmarx);
 #else
-         dma_disable_stream(hw->dmactl, hw->dmarx); // STM32F4 API
+            dma_disable_stream(hw->dmactl, hw->dmarx);
 #endif
-         if (currentIdx > 1) //handle just \n quicker
-         {
-            inBuf[currentIdx] = 0;
+
+            // Since the DMA is circular, we assume that the command starts at index 0.
+            // To simplify, we null-terminate the command at the current index.
+            inBuf[currentIdx] = '\0';
+
+            // Reset our software read pointer to 0.
             lastIdx = 0;
+
+            // Process the command stored in inBuf.
             char *space = (char*)my_strchr(inBuf, ' ');
-
-            if (0 == *space) //No args after command, look for end of line
+            if (space == NULL || *space == 0)
             {
-               space = (char*)my_strchr(inBuf, '\n');
-               args[0] = 0;
-            }
-            else //There are arguments, copy everything behind the space
-            {
-               my_strcpy(args, space + 1);
-            }
-
-            if (0 == *space) //No \n found? try \r
-               space = (char*)my_strchr(inBuf, '\r');
-
-            *space = 0;
-            pCurCmd = NULL;
-
-            if (my_strcmp(inBuf, "enableuart") == 0)
-            {
-               EnableUart(args);
-               currentIdx = 0; //Prevent unknown command message
-            }
-            else if (my_strcmp(inBuf, "fastuart") == 0)
-            {
-               FastUart(args);
-               currentIdx = 0;
-            }
-            else if (my_strcmp(inBuf, "echo") == 0)
-            {
-               Echo(args);
-               currentIdx = 0;
+                // No space found: look for newline (or carriage return) and set args empty.
+                space = (char*)my_strchr(inBuf, '\n');
+                if (space == NULL)
+                    space = (char*)my_strchr(inBuf, '\r');
+                args[0] = '\0';
             }
             else
             {
-               pCurCmd = CmdLookup(inBuf);
+                my_strcpy(args, space + 1);
             }
+            if (space != NULL)
+                *space = '\0';  // Null-terminate the command
 
-            if (NULL != pCurCmd)
+            pCurCmd = NULL;
+            if (my_strcmp(inBuf, "enableuart") == 0)
             {
-               usart_wait_send_ready(usart);
-               pCurCmd->CmdFunc(this, args);
+                EnableUart(args);
             }
-            else if (currentIdx > 1 && enabled)
+            else if (my_strcmp(inBuf, "fastuart") == 0)
             {
-               Send("Unknown command sequence\r\n");
+                FastUart(args);
             }
-         }
-         ResetDMA();
-      }
-      else if (inBuf[0] == '!' && NULL != pCurCmd)
-      {
-         ResetDMA();
-         lastIdx = 0;
-         pCurCmd->CmdFunc(this, args);
-      }
-   }
+            else if (my_strcmp(inBuf, "echo") == 0)
+            {
+                Echo(args);
+            }
+            else
+            {
+                pCurCmd = CmdLookup(inBuf);
+            }
+            if (pCurCmd != NULL)
+            {
+                usart_wait_send_ready(usart);
+                pCurCmd->CmdFunc(this, args);
+            }
+            else if (my_strlen(inBuf) > 1 && enabled)
+            {
+                Send("Unknown command sequence\r\n");
+            }
+            // Reset the RX DMA ready for new command
+            ResetRxDMA();
+        }
+        else if (inBuf[0] == '!' && pCurCmd != NULL)
+        {
+            // Special handling for '!' commands.
+            ResetRxDMA();
+            lastIdx = 0;
+            pCurCmd->CmdFunc(this, args);
+        }
+    }
 }
 
-void Terminal::SetNodeId(uint8_t id)
-{
-   char one[] = { '1', 0 };
-   char buf[4];
-   nodeId = id;
-
-   if (nodeId != 1)
-   {
-      Send("Disabling terminal, type 'enableuart ");
-      my_ltoa(buf, id, 10);
-      Send(buf);
-      Send("' to re-enable\r\n");
-   }
-
-   EnableUart(one);
-}
 
 /*
  * Revision 1 hardware can only use synchronous sending as the DMA channel is
@@ -325,19 +288,58 @@ void Terminal::DisableTxDMA()
    usart_disable_tx_dma(usart);
 }
 
-void Terminal::ResetDMA()
+
+#ifndef STM32F1
+
+void Terminal::ResetTxDMA()
 {
+    dma_disable_stream(hw->dmactl, hw->dmatx);  // Ensure DMA disabled first
+    while (DMA2_S7CR & DMA_SxCR_EN); // Wait until fully disabled
+    dma_stream_reset(hw->dmactl, hw->dmatx);
+    dma_channel_select(hw->dmactl, hw->dmatx, hw->dmaChannel); 
+    dma_set_transfer_mode(hw->dmactl, hw->dmatx, DMA_SxCR_DIR_MEM_TO_PERIPHERAL);
+    dma_set_peripheral_address(hw->dmactl, hw->dmatx, (uint32_t)&USART_DR(usart));
+    dma_set_memory_address(hw->dmactl, hw->dmatx, (uint32_t)outBuf);
+    dma_set_number_of_data(hw->dmactl, hw->dmatx, bufSize);
+    dma_set_memory_size(hw->dmactl, hw->dmatx, DMA_SxCR_MSIZE_8BIT);
+    dma_enable_memory_increment_mode(hw->dmactl, hw->dmatx);
+    dma_enable_stream(hw->dmactl, hw->dmatx); 
+}
+
+#endif
+
+void Terminal::ResetRxDMA()
+{
+
 #ifdef STM32F1
+
    dma_disable_channel(hw->dmactl, hw->dmarx);
    dma_set_memory_address(hw->dmactl, hw->dmarx, (uint32_t)inBuf);
    dma_set_number_of_data(hw->dmactl, hw->dmarx, bufSize);
    dma_enable_channel(hw->dmactl, hw->dmarx);
-#else
-   dma_disable_stream(hw->dmactl, hw->dmarx); 
-   dma_set_number_of_data(hw->dmactl, hw->dmarx, bufSize);
-   dma_clear_interrupt_flags(hw->dmactl, hw->dmarx, DMA_TCIF);
-   dma_enable_stream(hw->dmactl, hw->dmarx); 
+
+# else
+
+    dma_disable_stream(hw->dmactl, hw->dmarx);      // Disable DMA to prevent conflicts
+    while (DMA2_S2CR & DMA_SxCR_EN);;  // Wait until fully disabled
+    
+    dma_clear_interrupt_flags(hw->dmactl, hw->dmarx, DMA_TCIF | DMA_HTIF | DMA_TEIF | DMA_DMEIF | DMA_FEIF);
+    dma_stream_reset(hw->dmactl, hw->dmarx);
+
+    dma_channel_select(hw->dmactl, hw->dmarx, hw->dmaChannel); 
+    dma_set_transfer_mode(hw->dmactl, hw->dmarx, DMA_SxCR_DIR_PERIPHERAL_TO_MEM);
+    dma_set_peripheral_size(hw->dmactl, hw->dmarx, DMA_SxCR_PSIZE_8BIT);
+    dma_set_memory_size(hw->dmactl, hw->dmarx, DMA_SxCR_MSIZE_8BIT);
+    dma_enable_memory_increment_mode(hw->dmactl, hw->dmarx);
+    dma_enable_circular_mode(hw->dmactl, hw->dmarx); 
+    dma_set_peripheral_address(hw->dmactl, hw->dmarx, (uint32_t)&USART_DR(usart));
+    dma_set_memory_address(hw->dmactl, hw->dmarx, (uint32_t)inBuf);
+    dma_set_number_of_data(hw->dmactl, hw->dmarx, bufSize);
+
+    dma_enable_stream(hw->dmactl, hw->dmarx);
+
 #endif
+
 }
 
 void Terminal::EnableUart(char* arg)
