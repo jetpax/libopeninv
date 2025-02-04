@@ -49,6 +49,8 @@ struct CANSPEED
 
 Stm32Can* Stm32Can::interfaces[MAX_INTERFACES];
 
+#ifdef STM32F1
+
 static const CANSPEED canSpeed[CanHardware::BaudLast] =
 #if CAN_PERIPH_SPEED == 32
 {
@@ -70,6 +72,18 @@ static const CANSPEED canSpeed[CanHardware::BaudLast] =
 #error Unhandled CAN peripheral speed, please define prescalers
 #endif
 
+#else
+
+static const CANSPEED canSpeed[CanHardware::BaudLast] =
+{
+   { CAN_BTR_TS1_13TQ, CAN_BTR_TS2_2TQ, 21 }, //125kbps
+   { CAN_BTR_TS1_11TQ, CAN_BTR_TS2_2TQ, 12 }, //250kbps
+   { CAN_BTR_TS1_11TQ, CAN_BTR_TS2_2TQ, 6 }, //500kbps
+   { CAN_BTR_TS1_10TQ, CAN_BTR_TS2_2TQ, 4 }, //800kbps
+   { CAN_BTR_TS1_11TQ, CAN_BTR_TS2_2TQ, 3 }, //1000kbps
+};
+
+#endif
 
 /** \brief Init can hardware with given baud rate
  * Initializes the following sub systems:
@@ -89,45 +103,42 @@ Stm32Can::Stm32Can(uint32_t baseAddr, enum baudrates baudrate, bool remap)
    switch (baseAddr)
    {
 case CAN1:
+#ifdef STM32F1
+
     if (remap)
     {
-#ifdef STM32F1
         // Configure CAN pin: RX (input pull-up).
         gpio_set_mode(GPIO_BANK_CAN1_PB_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN1_PB_RX);
         gpio_set(GPIO_BANK_CAN1_PB_RX, GPIO_CAN1_PB_RX);
 
         // Configure CAN pin: TX.
         gpio_set_mode(GPIO_BANK_CAN1_PB_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN1_PB_TX);
-#else
-      // STM32F405 remapped pins: CAN1_RX on PB8, CAN1_TX on PB9
-      gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO8);  // RX
-      gpio_set_af(GPIOB, GPIO_AF9, GPIO8);  // Alternate Function 9 for CAN1_RX
-
-      gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO9);  // TX
-      gpio_set_af(GPIOB, GPIO_AF9, GPIO9);  // Alternate Function 9 for CAN1_TX
-#endif
     }
     else
     {
-#ifdef STM32F1
         // Configure CAN pin: RX (input pull-up).
         gpio_set_mode(GPIO_BANK_CAN1_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN1_RX);
         gpio_set(GPIO_BANK_CAN1_RX, GPIO_CAN1_RX);
 
         // Configure CAN pin: TX.
         gpio_set_mode(GPIO_BANK_CAN1_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN1_TX);
-#else
-         // STM32F405 default pins: CAN1_RX on PA11, CAN1_TX on PA12
-         gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO11);  // RX
-         gpio_set_af(GPIOA, GPIO_AF9, GPIO11);  // Alternate Function 9 for CAN1_RX
-
-         gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO12);  // TX
-         gpio_set_af(GPIOA, GPIO_AF9, GPIO12);  // Alternate Function 9 for CAN1_TX
-#endif
     }
 
-         //CAN1 RX and TX IRQs
+#else
+
+    // STM32F405 CAN1_RX on PB8, CAN1_TX on PB9
+    gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO8);  // RX
+    gpio_set_af(GPIOB, GPIO_AF9, GPIO8);  // Alternate Function 9 for CAN1_RX
+
+    gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO9);  // TX
+    gpio_set_af(GPIOB, GPIO_AF9, GPIO9);  // Alternate Function 9 for CAN1_TX
+
+#endif
+
+
+    //CAN1 RX and TX IRQs
 #ifdef STM32F1
+
     // Enable CAN RX0 interrupt for STM32F1
     nvic_enable_irq(NVIC_USB_LP_CAN_RX0_IRQ);            // USB Low Power & CAN RX0 IRQ
     nvic_set_priority(NVIC_USB_LP_CAN_RX0_IRQ, 0xF << 4);        // Lowest priority
@@ -137,7 +148,9 @@ case CAN1:
     // STM32F1: Enable CAN TX interrupt
     nvic_enable_irq(NVIC_USB_HP_CAN_TX_IRQ);              // CAN TX
     nvic_set_priority(NVIC_USB_HP_CAN_TX_IRQ, 0xF << 4);  // Lowest priority
+
 #else
+
     // Enable CAN1 RX0 interrupt for STM32F4
     nvic_enable_irq(NVIC_CAN1_RX0_IRQ);                  // CAN1 RX0 IRQ
     nvic_set_priority(NVIC_CAN1_RX0_IRQ, 0xF << 4);      // Lowest priority
@@ -147,48 +160,46 @@ case CAN1:
     // STM32F4: Enable CAN TX interrupt
     nvic_enable_irq(NVIC_CAN1_TX_IRQ);                   // CAN1 TX
     nvic_set_priority(NVIC_CAN1_TX_IRQ, 0xF << 4);       // Lowest priority
+
 #endif
+
    interfaces[0] = this;
    break;
+
 case CAN2:
+#ifdef STM32F1
+
     if (remap)
     {
-#ifdef STM32F1
         // Configure CAN pin: RX (input pull-up).
         gpio_set_mode(GPIO_BANK_CAN2_RE_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN2_RE_RX);
         gpio_set(GPIO_BANK_CAN2_RE_RX, GPIO_CAN2_RE_RX);
 
         // Configure CAN pin: TX.
         gpio_set_mode(GPIO_BANK_CAN2_RE_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN2_RE_TX);
-#else
-        // Configure CAN pin: RX (input pull-up).
-        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO12);
-        gpio_set_af(GPIOB, GPIO_AF9, GPIO12); // Set alternate function for CAN2_RX (remap)
 
-        // Configure CAN pin: TX.
-        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO13);
-        gpio_set_af(GPIOB, GPIO_AF9, GPIO13); // Set alternate function for CAN2_TX (remap)
-#endif
     }
     else
     {
-#ifdef STM32F1
         // Configure CAN pin: RX (input pull-up).
         gpio_set_mode(GPIO_BANK_CAN2_RX, GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN, GPIO_CAN2_RX);
         gpio_set(GPIO_BANK_CAN2_RX, GPIO_CAN2_RX);
 
         // Configure CAN pin: TX.
         gpio_set_mode(GPIO_BANK_CAN2_TX, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO_CAN2_TX);
-#else
-        // Configure CAN pin: RX (input pull-up).
-        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO12);
-        gpio_set_af(GPIOB, GPIO_AF9, GPIO12); // Set alternate function for CAN2_RX
+    }  
 
-        // Configure CAN pin: TX.
-        gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO13);
-        gpio_set_af(GPIOB, GPIO_AF9, GPIO13); // Set alternate function for CAN2_TX
+#else
+
+    // STM32F405 CAN2_RX on PB12, CAN2_TX on PB13
+    gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO12);  // RX
+    gpio_set_af(GPIOB, GPIO_AF9, GPIO12);  // Alternate Function 9 for CAN1_RX
+
+    gpio_mode_setup(GPIOB, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO13);  // TX
+    gpio_set_af(GPIOB, GPIO_AF9, GPIO13);  // Alternate Function 9 for CAN1_TX
+
 #endif
-    }
+
     break;
 
          //CAN2 RX and TX IRQs
@@ -410,10 +421,22 @@ void Stm32Can::ConfigureFilters()
 }
 
 /* Interrupt service routines */
+
+#ifdef STM32F1
+
 extern "C" void usb_lp_can_rx0_isr(void)
 {
    Stm32Can::GetInterface(0)->HandleMessage(0);
 }
+
+#else
+
+extern "C" void can1_rx0_isr(void)
+{
+   Stm32Can::GetInterface(0)->HandleMessage(0);
+}
+
+#endif
 
 extern "C" void can_rx1_isr()
 {
